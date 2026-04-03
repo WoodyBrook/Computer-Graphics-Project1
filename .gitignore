@@ -1,0 +1,11 @@
+.DS_Store
+*.DS_Store
+build/
+out/
+bin/
+.vs/
+.idea/
+CMakeSettings.json
+Makefile
+*.o
+*.exe
