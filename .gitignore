@@ -9,3 +9,7 @@ CMakeSettings.json
 Makefile
 *.o
 *.exe
+
+# Local copy / backup of ph2d (not tracked)
+ph2d-1/
+作业要求.md
