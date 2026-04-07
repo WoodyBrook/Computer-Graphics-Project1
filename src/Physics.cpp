@@ -6,6 +6,66 @@
 
 // ──── Utility functions ────
 
+namespace
+{
+
+void computeRectWorldCorners(const RigidBody& body, Vec2 out[4])
+{
+    float c = std::cos(body.rotation);
+    float s = std::sin(body.rotation);
+
+    const Vec2 localCorners[4] = {
+        Vec2(-body.halfSize.x, -body.halfSize.y),
+        Vec2(body.halfSize.x, -body.halfSize.y),
+        Vec2(body.halfSize.x, body.halfSize.y),
+        Vec2(-body.halfSize.x, body.halfSize.y)
+    };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        out[i].x = body.position.x + localCorners[i].x * c - localCorners[i].y * s;
+        out[i].y = body.position.y + localCorners[i].x * s + localCorners[i].y * c;
+    }
+}
+
+Vec2 averageSupportPoint(const RigidBody& body, Vec2 direction)
+{
+    Vec2 corners[4];
+    computeRectWorldCorners(body, corners);
+
+    float maxProj = -1e10f;
+    const float eps = 0.5f;
+    Vec2 sum(0.f, 0.f);
+    int count = 0;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        float proj = dot(corners[i], direction);
+        if (proj > maxProj + eps)
+        {
+            maxProj = proj;
+            sum = corners[i];
+            count = 1;
+        }
+        else if (std::abs(proj - maxProj) <= eps)
+        {
+            sum += corners[i];
+            ++count;
+        }
+    }
+
+    return count > 0 ? sum / static_cast<float>(count) : body.position;
+}
+
+bool isNearAxisAligned(float rotation)
+{
+    const float kHalfPi = 1.57079632679f;
+    float snapped = std::round(rotation / kHalfPi) * kHalfPi;
+    return std::abs(rotation - snapped) < 0.12f;
+}
+
+} // namespace
+
 inline float cross2D(Vec2 a, Vec2 b)
 {
     return a.x * b.y - a.y * b.x;
@@ -37,7 +97,7 @@ inline Vec2 normalize(Vec2 v)
     return len > 1e-6f ? v / len : Vec2(0.f, 0.f);
 }
 
-// RigidBody mass computation
+// ──── RigidBody mass computation ────
 
 void RigidBody::computeMassProperties(float density)
 {
@@ -68,7 +128,7 @@ void RigidBody::computeMassProperties(float density)
     invInertia = inertia > 1e-6f ? 1.f / inertia : 0.f;
 }
 
-// PhysicsWorld
+// ──── PhysicsWorld ────
 
 PhysicsWorld::PhysicsWorld()
 {
@@ -129,7 +189,7 @@ void PhysicsWorld::integrate(RigidBody& body, float dt)
     
 }
 
-// Collision Detection
+// ──── Collision Detection ────
 
 bool PhysicsWorld::detectCollision(const RigidBody& a, const RigidBody& b, CollisionInfo& info)
 {
@@ -235,7 +295,8 @@ bool PhysicsWorld::detectCircleRect(const RigidBody& circle, const RigidBody& re
 
 bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, CollisionInfo& info)
 {
-    // SAT for rotated rectangles
+    // Separating Axis Theorem (SAT) for rotated rectangles
+    // Test 4 axes: 2 from each rectangle
     
     float cA = std::cos(a.rotation);
     float sA = std::sin(a.rotation);
@@ -250,13 +311,12 @@ bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, Collis
     
     float minPenetration = 1e10f;
     Vec2  minAxis;
-    int   minAxisIndex = -1;
-    
     for (int i = 0; i < 4; ++i)
     {
         Vec2 axis = axes[i];
         
         // Project both rectangles onto this axis
+        // A's corners
         Vec2 aCorners[4];
         aCorners[0] = Vec2(-a.halfSize.x, -a.halfSize.y);
         aCorners[1] = Vec2(a.halfSize.x, -a.halfSize.y);
@@ -302,7 +362,6 @@ bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, Collis
         {
             minPenetration = penetration;
             minAxis = axis;
-            minAxisIndex = i;
         }
     }
     
@@ -314,81 +373,31 @@ bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, Collis
     info.hasCollision = true;
     info.normal = minAxis;
     info.penetration = minPenetration;
-    
-    // Find contact point
-    Vec2 contactOnA = a.position + minAxis * (a.halfSize.x * std::abs(dot(axes[0], minAxis)) + 
-                                               a.halfSize.y * std::abs(dot(axes[1], minAxis)));
-    Vec2 contactOnB = b.position - minAxis * (b.halfSize.x * std::abs(dot(axes[2], minAxis)) + 
-                                               b.halfSize.y * std::abs(dot(axes[3], minAxis)));
-    info.contactPoint = (contactOnA + contactOnB) * 0.5f;
+
+    if (a.isGround && !b.isGround)
+    {
+        // For ground contacts, using the dynamic rect's support points gives a much
+        // stabler lever arm than averaging against the giant floor rectangle.
+        info.contactPoint = averageSupportPoint(b, minAxis * -1.f);
+    }
+    else if (b.isGround && !a.isGround)
+    {
+        info.contactPoint = averageSupportPoint(a, minAxis);
+    }
+    else
+    {
+        // Generic contact approximation for ordinary rect-rect collisions.
+        Vec2 contactOnA = a.position + minAxis * (a.halfSize.x * std::abs(dot(axes[0], minAxis)) +
+                                                   a.halfSize.y * std::abs(dot(axes[1], minAxis)));
+        Vec2 contactOnB = b.position - minAxis * (b.halfSize.x * std::abs(dot(axes[2], minAxis)) +
+                                                   b.halfSize.y * std::abs(dot(axes[3], minAxis)));
+        info.contactPoint = (contactOnA + contactOnB) * 0.5f;
+    }
     
     return true;
 }
 
-bool PhysicsWorld::detectBodyGround(const RigidBody& body, CollisionInfo& info)
-{
-    // Ground is an infinite horizontal plane at y = groundY
-    
-    if (body.shape == RigidBody::Circle)
-    {
-        float bottom = body.position.y + body.radius;
-        if (bottom > groundY)
-        {
-            info.hasCollision = true;
-            info.normal = Vec2(0.f, -1.f);  // Normal points upward
-            info.penetration = bottom - groundY;
-            info.contactPoint = Vec2(body.position.x, groundY);
-            return true;
-        }
-    }
-    else // Rect
-    {
-        // Check all 4 corners
-        float c = std::cos(body.rotation);
-        float s = std::sin(body.rotation);
-        
-        float maxPenetration = 0.f;
-        float supportXSum = 0.f;
-        int supportCount = 0;
-        
-        Vec2 corners[4];
-        corners[0] = Vec2(-body.halfSize.x, -body.halfSize.y);
-        corners[1] = Vec2(body.halfSize.x, -body.halfSize.y);
-        corners[2] = Vec2(body.halfSize.x, body.halfSize.y);
-        corners[3] = Vec2(-body.halfSize.x, body.halfSize.y);
-        
-        for (int i = 0; i < 4; ++i)
-        {
-            Vec2 worldCorner;
-            worldCorner.x = body.position.x + corners[i].x * c - corners[i].y * s;
-            worldCorner.y = body.position.y + corners[i].x * s + corners[i].y * c;
-            
-            if (worldCorner.y > groundY)
-            {
-                float pen = worldCorner.y - groundY;
-                supportXSum += worldCorner.x;
-                ++supportCount;
-                if (pen > maxPenetration)
-                {
-                    maxPenetration = pen;
-                }
-            }
-        }
-        
-        if (maxPenetration > 0.f && supportCount > 0)
-        {
-            info.hasCollision = true;
-            info.normal = Vec2(0.f, -1.f);
-            info.penetration = maxPenetration;
-            info.contactPoint = Vec2(supportXSum / static_cast<float>(supportCount), groundY);
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-// Collision Response
+// ──── Collision Response ────
 
 void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionInfo& info)
 {
@@ -415,11 +424,21 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
     if (velAlongN > 0.f)
         return;
     
-    // Combined restitution
+    const bool aGround = a.isGround;
+    const bool bGround = b.isGround;
+
+    // Combined restitution (use minimum for stability)
     float e = std::min(a.restitution, b.restitution);
     
     // Combined friction (geometric mean)
     float mu = std::sqrt(a.friction * b.friction);
+
+    if (aGround || bGround)
+    {
+        const RigidBody& dynamicBody = aGround ? b : a;
+        e = dynamicBody.restitution * 0.8f;
+        mu = std::sqrt(dynamicBody.friction * 0.6f);
+    }
     
     // Normal impulse scalar
     float invMassSum = a.invMass + b.invMass;
@@ -443,7 +462,7 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
         b.angularVel += cross2D(rB, impulse) * b.invInertia;
     }
     
-    // Friction impulse
+    // ──── Friction impulse (Coulomb model) ────
     
     // Recalculate relative velocity after normal impulse
     velA = a.velocity + cross2D(a.angularVel, rA);
@@ -460,7 +479,8 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
     float velAlongT = dot(relVel, tangent);
     
     // Friction impulse scalar
-    float invInertiaT = cross2D(rA, tangent) * cross2D(rA, tangent) * a.invInertia + cross2D(rB, tangent) * cross2D(rB, tangent) * b.invInertia;
+    float invInertiaT = cross2D(rA, tangent) * cross2D(rA, tangent) * a.invInertia +
+                        cross2D(rB, tangent) * cross2D(rB, tangent) * b.invInertia;
     
     float jt = -velAlongT / (invMassSum + invInertiaT);
     
@@ -484,72 +504,22 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
         b.velocity += frictionImpulse * b.invMass;
         b.angularVel += cross2D(rB, frictionImpulse) * b.invInertia;
     }
-}
 
-void PhysicsWorld::resolveBodyGround(RigidBody& body, const CollisionInfo& info)
-{
-    if (!info.hasCollision || body.isStatic)
-        return;
-    
-    Vec2 n = info.normal;  // Points upward (-y direction)
-    Vec2 contact = info.contactPoint;
-    
-    // Relative velocity at contact
-    Vec2 rA = contact - body.position;
-    Vec2 velA = body.velocity + cross2D(body.angularVel, rA);
-    
-    float velAlongN = dot(velA, n);
-    
-    // Separating
-    if (velAlongN > 0.f)
-        return;
-    
-    // Ground restitution and friction
-    float e = body.restitution * 0.8f;  // Ground absorbs more energy
-    float mu = std::sqrt(body.friction * 0.6f);  // Ground friction ~0.6
-    
-    // Normal impulse (ground has infinite mass/inertia)
-    float invInertiaSum = cross2D(rA, n) * cross2D(rA, n) * body.invInertia;
-    float j = -(1.f + e) * velAlongN / (body.invMass + invInertiaSum);
-    
-    // Apply normal impulse
-    Vec2 impulse = n * j;
-    body.velocity += impulse * body.invMass;
-    body.angularVel += cross2D(rA, impulse) * body.invInertia;
-    
-    // Friction impulse
-    Vec2 velAfter = body.velocity + cross2D(body.angularVel, rA);
-    Vec2 tangent = velAfter - n * dot(velAfter, n);
-    float tanLen = tangent.length();
-    
-    if (tanLen > 1e-6f)
+    // Preserve the old ground feel even though the floor now participates
+    // in the normal rigid-body pipeline as a static rectangle.
+    if (aGround && b.shape == RigidBody::Circle)
     {
-        tangent = tangent / tanLen;
-        float velAlongT = dot(velAfter, tangent);
-        float invInertiaT = cross2D(rA, tangent) * cross2D(rA, tangent) * body.invInertia;
-        float jt = -velAlongT / (body.invMass + invInertiaT);
-        
-        // Coulomb constraint
-        if (std::abs(jt) > mu * std::abs(j))
-        {
-            jt = -mu * std::abs(j) * (velAlongT > 0.f ? 1.f : -1.f);
-        }
-        
-        Vec2 frictionImpulse = tangent * jt;
-        body.velocity += frictionImpulse * body.invMass;
-        body.angularVel += cross2D(rA, frictionImpulse) * body.invInertia;
+        b.velocity.x *= 0.985f;
+        b.angularVel *= 0.985f;
     }
-
-    // Extra rolling resistance for the bird
-    if (body.shape == RigidBody::Circle)
+    else if (bGround && a.shape == RigidBody::Circle)
     {
-        body.velocity.x *= 0.985f;
-        // Slightly lighter roll damping so rolling stays visible on ground
-        body.angularVel *= 0.985f;
+        a.velocity.x *= 0.985f;
+        a.angularVel *= 0.985f;
     }
 }
 
-// Position Correction
+// ──── Position Correction (Baumgarte) ────
 
 void PhysicsWorld::correctPositions(RigidBody& a, RigidBody& b, const CollisionInfo& info)
 {
@@ -577,29 +547,17 @@ void PhysicsWorld::correctPositions(RigidBody& a, RigidBody& b, const CollisionI
         b.position += correctionVec * (b.invMass / totalInvMass);
 }
 
-void PhysicsWorld::correctPositionGround(RigidBody& body, const CollisionInfo& info)
-{
-    if (!info.hasCollision || body.isStatic)
-        return;
-    
-    const float slop = 0.5f;
-    const float percent = 0.6f;
-    
-    float correction = std::max(info.penetration - slop, 0.f) * percent;
-    body.position.y -= correction;  // Move body upward
-}
-
-// Physics Step 
+// ──── Physics Step ────
 
 void PhysicsWorld::step(float dt)
 {
-    // Integrate velocities and positions
+    // 1. Integrate velocities and positions
     for (RigidBody& body : bodies_)
     {
         integrate(body, dt);
     }
     
-    // Collision detection and response (multiple iterations for stability)
+    // 2. Collision detection and response (multiple iterations for stability)
     for (int iter = 0; iter < collisionIterations; ++iter)
     {
         // Body-body collisions
@@ -615,20 +573,9 @@ void PhysicsWorld::step(float dt)
                 }
             }
         }
-        
-        // Body-ground collisions
-        for (RigidBody& body : bodies_)
-        {
-            CollisionInfo info;
-            if (detectBodyGround(body, info))
-            {
-                resolveBodyGround(body, info);
-                correctPositionGround(body, info);
-            }
-        }
     }
 
-    // Sleep bodies 
+    // 3. Sleep bodies that are resting on the ground or supported by another body.
     for (size_t i = 0; i < bodies_.size(); ++i)
     {
         RigidBody& body = bodies_[i];
@@ -637,29 +584,29 @@ void PhysicsWorld::step(float dt)
 
         float velLen = body.velocity.length();
         bool hasSupport = false;
+        float bestSupportY = -1.f;
 
-        CollisionInfo groundInfo;
-        if (detectBodyGround(body, groundInfo))
+        for (size_t j = 0; j < bodies_.size(); ++j)
         {
-            hasSupport = true;
-        }
-        else
-        {
-            for (size_t j = 0; j < bodies_.size(); ++j)
+            if (i == j)
+                continue;
+
+            CollisionInfo info;
+            if (detectCollision(body, bodies_[j], info) && info.normal.y > 0.35f)
             {
-                if (i == j)
-                    continue;
-
-                CollisionInfo info;
-                if (detectCollision(body, bodies_[j], info) && info.normal.y > 0.35f)
-                {
-                    hasSupport = true;
-                    break;
-                }
+                hasSupport = true;
+                bestSupportY = std::max(bestSupportY, info.normal.y);
             }
         }
 
-        if (hasSupport && velLen < 5.f && std::abs(body.angularVel) < 0.05f)
+        bool allowSleep = hasSupport && velLen < 3.f && std::abs(body.angularVel) < 0.03f;
+        if (body.shape == RigidBody::Rect)
+        {
+            // Rectangles should not "freeze" while leaning on a shallow contact.
+            allowSleep = allowSleep && bestSupportY > 0.8f && isNearAxisAligned(body.rotation);
+        }
+
+        if (allowSleep)
         {
             body.velocity = Vec2(0.f, 0.f);
             body.angularVel = 0.f;

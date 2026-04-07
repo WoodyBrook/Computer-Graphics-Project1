@@ -13,7 +13,7 @@
 #include <iostream>
 #include <random>
 
-// Internal helpers
+// ──── Internal helpers ────
 
 namespace
 {
@@ -165,9 +165,9 @@ Color hslToRgb(float hDeg, float s, float l)
 	return Color(rp + m, gp + m, bp + m, 1.f);
 }
 
-}
+} // namespace
 
-// Internal methods
+// ──── Internal methods ────
 
 void Renderer2D::ensureGlState()
 {
@@ -234,7 +234,7 @@ void Renderer2D::rectCorners(Vec2 pos, Vec2 size, float rad, Vec2 out[4])
 	}
 }
 
-// Public API
+// ──── Public API ────
 
 void Renderer2D::init()
 {
@@ -291,7 +291,7 @@ void Renderer2D::beginFrame(int framebufferW, int framebufferH)
 
 void Renderer2D::drawBackground(float floorY, float screenW)
 {
-	// Sky bands
+	// Sky bands: gradient from deep blue at top to lighter blue near horizon
 	const float coverW = std::max(screenW, 1400.f);
 	const float bandH = floorY / 4.f;
 	
@@ -315,7 +315,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 	drawFilledCircle(Vec2(1000.f, farY + 15.f), 110.f, farMountain, 32);
 	drawFilledRect(Vec2(0.f, farY), Vec2(coverW, 200.f), farMountain);
 	
-	// Near mountain layer
+	// Near mountain layer (slightly darker, closer)
 	Color nearMountain(0.42f, 0.48f, 0.52f, 0.85f);
 	float nearY = floorY - 40.f;
 	drawFilledCircle(Vec2(150.f, nearY), 90.f, nearMountain, 32);
@@ -324,7 +324,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 	drawFilledCircle(Vec2(900.f, nearY + 25.f), 80.f, nearMountain, 32);
 	drawFilledRect(Vec2(0.f, nearY), Vec2(coverW, 150.f), nearMountain);
 	
-	// Clouds
+	// Clouds: 3 circles + 1 rectangle per cloud
 	Color cloudColor = withAlpha(Colors::White, 0.18f);
 	Color cloudBright = withAlpha(Colors::White, 0.22f);
 	
@@ -427,7 +427,7 @@ void Renderer2D::drawBird(Vec2 center, float radius, Color bodyColor, float rota
 	Color outlineColor = darken(bodyColor, 0.45f);
 	drawCircleOutline(center, radius, outlineColor, 2.f, 32);
 	
-	// Eye
+	// Eye (facing +x in local bird space)
 	float eyeR = radius * 0.22f;
 	Vec2 eyeLocal = Vec2(radius * 0.32f, -radius * 0.22f);
 	Vec2 eyeCenter = rw(eyeLocal);
@@ -479,7 +479,7 @@ void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 	Color bodyGreen(0.55f, 0.78f, 0.35f, 1.f);
 	Color bodyDark(0.32f, 0.52f, 0.22f, 1.f);
 
-	// Shadow
+	// Shadow (screen-space, not rolled with pig)
 	Color shadowColor(0.12f, 0.14f, 0.1f, 0.45f);
 	drawFilledCircle(center + Vec2(4.f, 5.f), radius * 0.92f, shadowColor, 28);
 
@@ -492,7 +492,7 @@ void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 	drawFilledCircle(rw(Vec2(-radius * 0.38f, radius * 0.18f)), radius * 0.22f, cheek, 16);
 	drawFilledCircle(rw(Vec2(radius * 0.38f, radius * 0.18f)), radius * 0.22f, cheek, 16);
 
-	// Snout
+	// Snout (local +y downward on screen; rotates with body)
 	float snR = radius * 0.42f;
 	Vec2 snoutLocal = Vec2(radius * 0.08f, radius * 0.32f);
 	Vec2 snoutC = rw(snoutLocal);
@@ -506,7 +506,7 @@ void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 	drawFilledCircle(rw(snoutLocal + Vec2(-snR * 0.35f, snR * 0.1f)), nostR, snoutDark, 10);
 	drawFilledCircle(rw(snoutLocal + Vec2(snR * 0.35f, snR * 0.1f)), nostR, snoutDark, 10);
 
-	// Eyes 
+	// Eyes (cartoon, local +x is pig forward)
 	float eyeRad = radius * 0.18f;
 	Vec2 eyeLLocal = Vec2(-radius * 0.32f, -radius * 0.15f);
 	Vec2 eyeRightLocal = Vec2(radius * 0.32f, -radius * 0.15f);

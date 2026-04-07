@@ -5,7 +5,7 @@
 
 #include <vector>
 
-// ──── Game State ────
+// Game State
 enum GameState
 {
     Aiming,    // Bird on slingshot, can be dragged
@@ -13,7 +13,7 @@ enum GameState
     Settled    // Bird stopped, waiting for reset
 };
 
-// ──── Bird ────
+// Bird 
 struct Bird
 {
     RigidBody  body;
@@ -26,7 +26,7 @@ struct Bird
     void init(float x, float y, float radius, const Color& c);
 };
 
-// ──── Brick ────
+// Brick 
 struct Brick
 {
     RigidBody  body;
@@ -36,7 +36,7 @@ struct Brick
     void init(float x, float y, float w, float h, const Color& c, int brickId);
 };
 
-// ──── Pig (green pig; circle body) ────
+// Pig (green pig; circle body) 
 struct Pig
 {
     RigidBody  body;
@@ -45,7 +45,7 @@ struct Pig
     void init(float x, float y, float radius, int pigId);
 };
 
-// ──── Game ────
+// Game 
 class Game
 {
 public:
@@ -76,6 +76,7 @@ private:
     Bird   bird_;
     std::vector<Brick> bricks_;
     std::vector<Pig>   pigs_;
+    RigidBody          groundBody_;
     
     Vec2   groundSize_;
     float  groundY_;
@@ -101,10 +102,13 @@ private:
     // Scene setup
     void setupScene();
 
-    /// Order in physics: bird, then all bricks, then all pigs.
+    /// Order in physics: bird, then all bricks, then all pigs, then ground.
     void rebuildPhysicsBodies();
     void syncBodiesFromPhysics();
 
     /// During flight: remove pigs hit by the bird or pigs that fall to the ground.
     void removePigsHitThisFrame();
+    bool allDynamicBodiesSettled() const;
+
+    int settleFrames_ = 0;
 };

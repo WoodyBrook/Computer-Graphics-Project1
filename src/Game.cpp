@@ -90,9 +90,7 @@ void Game::init(float screenW, float screenH, float groundY)
 {
     setViewportSize(screenW, screenH);
     groundY_ = groundY;
-    
-    physics_.groundY = groundY;
-    
+
     setupScene();
 }
 
@@ -107,6 +105,22 @@ void Game::setupScene()
     pendingLaunchFx_ = false;
     pendingLaunchFxPos_ = Vec2(0.f, 0.f);
     pendingPigFxPositions_.clear();
+    settleFrames_ = 0;
+
+    // Keep the rendered ground and the physical floor aligned at the same top edge.
+    groundSize_ = Vec2(std::max(screenW_ * 4.f, 6000.f), 548.f);
+    groundBody_.shape = RigidBody::Rect;
+    groundBody_.position = Vec2(screenW_ * 0.5f, groundY_ + groundSize_.y * 0.5f);
+    groundBody_.velocity = Vec2(0.f, 0.f);
+    groundBody_.rotation = 0.f;
+    groundBody_.angularVel = 0.f;
+    groundBody_.halfSize = groundSize_ * 0.5f;
+    groundBody_.radius = 0.f;
+    groundBody_.isStatic = true;
+    groundBody_.isGround = true;
+    groundBody_.restitution = 0.2f;
+    groundBody_.friction = 0.6f;
+    groundBody_.computeMassProperties(1.f);
     
     // Initialize bird so the full pull radius fits above the ground, which makes aiming
     // feel natural in all directions instead of getting distorted near the floor.
@@ -190,6 +204,7 @@ void Game::rebuildPhysicsBodies()
         physics_.addBody(brick.body);
     for (Pig& p : pigs_)
         physics_.addBody(p.body);
+    physics_.addBody(groundBody_);
 }
 
 void Game::syncBodiesFromPhysics()
@@ -268,6 +283,24 @@ void Game::removePigsHitThisFrame()
     rebuildPhysicsBodies();
 }
 
+bool Game::allDynamicBodiesSettled() const
+{
+    const auto& bodies = physics_.bodies();
+    bool hasDynamic = false;
+
+    for (const RigidBody& body : bodies)
+    {
+        if (body.isStatic)
+            continue;
+
+        hasDynamic = true;
+        if (body.velocity.length() > 4.f || std::abs(body.angularVel) > 0.05f)
+            return false;
+    }
+
+    return hasDynamic;
+}
+
 // ──── Coordinate conversion ────
 Vec2 Game::bodyToDrawPos(const RigidBody& body)
 {
@@ -305,18 +338,16 @@ void Game::physicsStep(float dt)
         physics_.step(dt);
         syncBodiesFromPhysics();
         removePigsHitThisFrame();
-        
-        // Check if bird has settled
-        float velLen = bird_.body.velocity.length();
-        bool nearGround = bird_.body.position.y + bird_.body.radius >= groundY_ - 2.f;
-        bool outOfBounds = bird_.body.position.x > screenW_ + 100.f ||
-                          bird_.body.position.x < -100.f ||
-                          bird_.body.position.y > groundY_ + 100.f;
-        
-        if ((velLen < 5.f && std::abs(bird_.body.angularVel) < 0.05f && nearGround) || outOfBounds)
-        {
+
+        // Only stop the simulation when the entire scene has been calm for a short
+        // moment, otherwise the old bird-only rule freezes half-collapsed towers.
+        if (allDynamicBodiesSettled())
+            ++settleFrames_;
+        else
+            settleFrames_ = 0;
+
+        if (settleFrames_ >= 18)
             state_ = Settled;
-        }
     }
 }
 

@@ -2,7 +2,6 @@
 
 #include "Renderer.h"  // Include for Vec2 and Color definitions
 #include <vector>
-#include <cmath>
 
 // ──── Collision Info ────
 struct CollisionInfo
@@ -29,6 +28,7 @@ struct RigidBody
     
     enum Shape { Circle, Rect } shape = Rect;
     bool  isStatic     = false;
+    bool  isGround     = false; // Static rect that represents the floor material
     float restitution  = 0.25f;  // Coefficient of restitution (bounce)
     float friction     = 0.5f;  // Coulomb friction coefficient
     
@@ -52,9 +52,6 @@ public:
     // Collision iteration count (higher = more stable stacking)
     int collisionIterations = 6;
     
-    // Ground y-coordinate (top edge of ground plane)
-    float groundY = 0.f;
-    
 private:
     std::vector<RigidBody> bodies_;
     float gravity_ = 500.f;  // Pixels/s^2, y-down coordinate system
@@ -66,15 +63,12 @@ private:
     bool detectCollision(const RigidBody& a, const RigidBody& b, CollisionInfo& info);
     bool detectCircleRect(const RigidBody& circle, const RigidBody& rect, CollisionInfo& info);
     bool detectRectRect(const RigidBody& a, const RigidBody& b, CollisionInfo& info);
-    bool detectBodyGround(const RigidBody& body, CollisionInfo& info);
     
     // Collision response
     void resolveCollision(RigidBody& a, RigidBody& b, const CollisionInfo& info);
-    void resolveBodyGround(RigidBody& body, const CollisionInfo& info);
     
     // Position correction (Baumgarte stabilization)
     void correctPositions(RigidBody& a, RigidBody& b, const CollisionInfo& info);
-    void correctPositionGround(RigidBody& body, const CollisionInfo& info);
 };
 
 // ──── Utility functions ────
