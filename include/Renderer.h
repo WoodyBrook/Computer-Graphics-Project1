@@ -3,7 +3,7 @@
 #include <cmath>
 #include <vector>
 
-/// Pure 2D renderer: standard C++ and system OpenGL only; no third-party libraries.
+/// Pure 2D renderer: standard C++, system OpenGL, and a tiny vendored image loader.
 
 // ──── Lightweight math types ────
 
@@ -103,7 +103,7 @@ public:
 	/// Start of frame: viewport, clear (sky blue), orthographic projection.
 	void beginFrame(int framebufferW, int framebufferH);
 
-	/// Sky, distant mountains, and clouds behind the ground plane.
+	/// Full-screen scenic backdrop behind the ground plane.
 	void drawBackground(float floorY, float screenW);
 
 	/// Subsoil + grass strip + top seam line (full width).
@@ -130,10 +130,10 @@ public:
 	/// Filled circle.
 	void drawFilledCircle(Vec2 center, float radius, Color color, int segments = 48);
 
-	/// Bird: body circle + eye + beak; features rotate with rotationRad (physics roll).
+	/// Bird: textured sprite aligned to the physics circle and rotated by rotationRad.
 	void drawBird(Vec2 center, float radius, Color bodyColor, float rotationRad = 0.f);
 
-	/// Green pig: round body, snout, eyes; face detail rotates with rotationRad.
+	/// Pig: textured sprite aligned to the physics circle and rotated by rotationRad.
 	void drawPig(Vec2 center, float radius, float rotationRad = 0.f);
 
 	/// Brick: fill + outline + horizontal stripes.
@@ -165,7 +165,10 @@ private:
 	void ensureGlState();
 	void updateProjection(int w, int h);
 	void uploadAndDraw(const float *xy, int vertCount, Color color);
+	void uploadAndDrawTextured(const float *xyuv, int vertCount, unsigned int textureId,
+	                           float whiteKeyThreshold, float whiteKeySoftness);
 	void thickLine(Vec2 a, Vec2 b, Color color, float width);
+	void destroyTexture(unsigned int &textureId);
 
 	/// Four corners of the rect at pos/size after rotation by rad about its center.
 	static void rectCorners(Vec2 pos, Vec2 size, float rad, Vec2 out[4]);
@@ -173,8 +176,22 @@ private:
 	unsigned int program_  = 0;
 	int uMvp_     = -1;
 	int uColor_   = -1;
+	unsigned int texturedProgram_ = 0;
+	int uTexMvp_  = -1;
+	int uSampler_ = -1;
+	int uWhiteKeyThreshold_ = -1;
+	int uWhiteKeySoftness_  = -1;
 	unsigned int vao_      = 0;
 	unsigned int vbo_      = 0;
+	unsigned int birdTexture_ = 0;
+	unsigned int pigTexture_  = 0;
+	unsigned int backgroundTexture_ = 0;
+	int birdTextureW_ = 0;
+	int birdTextureH_ = 0;
+	int pigTextureW_  = 0;
+	int pigTextureH_  = 0;
+	int backgroundTextureW_ = 0;
+	int backgroundTextureH_ = 0;
 
 	float proj_[16] = {};
 	bool initialized_ = false;

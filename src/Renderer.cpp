@@ -10,13 +10,21 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <random>
+#include <string>
+#include <vector>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 // ──── Internal helpers ────
 
 namespace
 {
+
+namespace fs = std::filesystem;
 
 const float kPi    = 3.14159265358979323846f;
 const float kTwoPi = 2.f * kPi;
@@ -165,6 +173,115 @@ Color hslToRgb(float hDeg, float s, float l)
 	return Color(rp + m, gp + m, bp + m, 1.f);
 }
 
+std::string resolveAssetPath(const char *relativePath)
+{
+	fs::path candidate(relativePath);
+	if (fs::exists(candidate))
+		return candidate.string();
+
+#ifdef ANGRY_BIRD_SOURCE_DIR
+	candidate = fs::path(ANGRY_BIRD_SOURCE_DIR) / relativePath;
+	if (fs::exists(candidate))
+		return candidate.string();
+#endif
+
+	return relativePath;
+}
+
+bool loadTextureFromFile(const char *relativePath, GLuint &textureId, int &width, int &height,
+                         bool removeWhiteBackground)
+{
+	const std::string path = resolveAssetPath(relativePath);
+	stbi_set_flip_vertically_on_load(1);
+	int channels = 0;
+	unsigned char *pixels = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+	if (!pixels)
+	{
+		std::cerr << "Failed to load texture: " << path << " (" << stbi_failure_reason() << ")\n";
+		return false;
+	}
+
+	if (removeWhiteBackground)
+	{
+		auto isNearWhite = [&](int pixelIndex) -> bool
+		{
+			const int base = pixelIndex * 4;
+			const int r = pixels[base + 0];
+			const int g = pixels[base + 1];
+			const int b = pixels[base + 2];
+			const int minCh = std::min(r, std::min(g, b));
+			const int maxCh = std::max(r, std::max(g, b));
+			return minCh >= 236 && (maxCh - minCh) <= 28;
+		};
+
+		std::vector<unsigned char> borderVisited(static_cast<size_t>(width * height), 0);
+		std::vector<int> queue;
+		queue.reserve(static_cast<size_t>(width + height) * 2u);
+
+		auto enqueueBorderWhite = [&](int x, int y)
+		{
+			if (x < 0 || y < 0 || x >= width || y >= height)
+				return;
+			const int idx = y * width + x;
+			if (borderVisited[static_cast<size_t>(idx)] || !isNearWhite(idx))
+				return;
+			borderVisited[static_cast<size_t>(idx)] = 1;
+			queue.push_back(idx);
+		};
+
+		for (int x = 0; x < width; ++x)
+		{
+			enqueueBorderWhite(x, 0);
+			enqueueBorderWhite(x, height - 1);
+		}
+		for (int y = 0; y < height; ++y)
+		{
+			enqueueBorderWhite(0, y);
+			enqueueBorderWhite(width - 1, y);
+		}
+
+		for (size_t head = 0; head < queue.size(); ++head)
+		{
+			const int idx = queue[head];
+			const int x = idx % width;
+			const int y = idx / width;
+			const int neighbors[4][2] = {
+				{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+			for (const auto &neighbor : neighbors)
+			{
+				const int nx = neighbor[0];
+				const int ny = neighbor[1];
+				if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+					continue;
+				const int nidx = ny * width + nx;
+				if (borderVisited[static_cast<size_t>(nidx)] || !isNearWhite(nidx))
+					continue;
+				borderVisited[static_cast<size_t>(nidx)] = 1;
+				queue.push_back(nidx);
+			}
+		}
+
+		for (size_t i = 0; i < borderVisited.size(); ++i)
+		{
+			if (!borderVisited[i])
+				continue;
+			pixels[i * 4 + 3] = 0;
+		}
+	}
+
+	glGenTextures(1, &textureId);
+	glBindTexture(GL_TEXTURE_2D, textureId);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	stbi_image_free(pixels);
+	return true;
+}
+
 } // namespace
 
 // ──── Internal methods ────
@@ -203,6 +320,35 @@ void Renderer2D::uploadAndDraw(const float *xy, int vertCount, Color color)
 	glDrawArrays(GL_TRIANGLES, 0, vertCount);
 }
 
+void Renderer2D::uploadAndDrawTextured(const float *xyuv, int vertCount, unsigned int textureId,
+                                       float whiteKeyThreshold, float whiteKeySoftness)
+{
+	if (vertCount < 3 || textureId == 0 || texturedProgram_ == 0)
+		return;
+
+	glUseProgram(texturedProgram_);
+	glUniformMatrix4fv(uTexMvp_, 1, GL_FALSE, proj_);
+	glUniform1f(uWhiteKeyThreshold_, whiteKeyThreshold);
+	glUniform1f(uWhiteKeySoftness_, whiteKeySoftness);
+	glUniform1i(uSampler_, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, textureId);
+	glBindVertexArray(vao_);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+	glBufferData(GL_ARRAY_BUFFER,
+	             static_cast<GLsizeiptr>(vertCount * 4 * sizeof(float)),
+	             xyuv, GL_STREAM_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+	                      reinterpret_cast<const void *>(2 * sizeof(float)));
+
+	glDrawArrays(GL_TRIANGLES, 0, vertCount);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void Renderer2D::thickLine(Vec2 a, Vec2 b, Color color, float width)
 {
 	Vec2 d = b - a;
@@ -217,6 +363,13 @@ void Renderer2D::thickLine(Vec2 a, Vec2 b, Color color, float width)
 		p0.x, p0.y, p1.x, p1.y, p2.x, p2.y,
 		p0.x, p0.y, p2.x, p2.y, p3.x, p3.y};
 	uploadAndDraw(v, 6, color);
+}
+
+void Renderer2D::destroyTexture(unsigned int &textureId)
+{
+	if (textureId)
+		glDeleteTextures(1, &textureId);
+	textureId = 0;
 }
 
 void Renderer2D::rectCorners(Vec2 pos, Vec2 size, float rad, Vec2 out[4])
@@ -253,6 +406,31 @@ layout (location = 0) out vec4 fragColor;
 uniform vec4 u_color;
 void main() { fragColor = u_color; }
 )";
+	const char *texVsSrc = R"(#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec2 aUv;
+uniform mat4 u_mvp;
+out vec2 v_uv;
+void main()
+{
+	v_uv = aUv;
+	gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);
+}
+)";
+	const char *texFsSrc = R"(#version 330 core
+in vec2 v_uv;
+layout (location = 0) out vec4 fragColor;
+uniform sampler2D u_tex;
+uniform float u_whiteKeyThreshold;
+uniform float u_whiteKeySoftness;
+void main()
+{
+	vec4 texel = texture(u_tex, v_uv);
+	if (texel.a < 0.02)
+		discard;
+	fragColor = texel;
+}
+)";
 
 	GLuint vs = compileShader(GL_VERTEX_SHADER, vsSrc);
 	GLuint fs = compileShader(GL_FRAGMENT_SHADER, fsSrc);
@@ -260,11 +438,26 @@ void main() { fragColor = u_color; }
 	glDeleteShader(vs);
 	glDeleteShader(fs);
 
+	GLuint texVs = compileShader(GL_VERTEX_SHADER, texVsSrc);
+	GLuint texFs = compileShader(GL_FRAGMENT_SHADER, texFsSrc);
+	texturedProgram_ = linkProgram(texVs, texFs);
+	glDeleteShader(texVs);
+	glDeleteShader(texFs);
+
 	uMvp_   = glGetUniformLocation(program_, "u_mvp");
 	uColor_ = glGetUniformLocation(program_, "u_color");
+	uTexMvp_ = glGetUniformLocation(texturedProgram_, "u_mvp");
+	uSampler_ = glGetUniformLocation(texturedProgram_, "u_tex");
+	uWhiteKeyThreshold_ = glGetUniformLocation(texturedProgram_, "u_whiteKeyThreshold");
+	uWhiteKeySoftness_ = glGetUniformLocation(texturedProgram_, "u_whiteKeySoftness");
 
 	glGenVertexArrays(1, &vao_);
 	glGenBuffers(1, &vbo_);
+
+	loadTextureFromFile("assets/textures/bird.png", birdTexture_, birdTextureW_, birdTextureH_, true);
+	loadTextureFromFile("assets/textures/pig.png", pigTexture_, pigTextureW_, pigTextureH_, true);
+	loadTextureFromFile("assets/textures/background.png", backgroundTexture_,
+	                    backgroundTextureW_, backgroundTextureH_, false);
 
 	initialized_ = true;
 }
@@ -273,10 +466,17 @@ void Renderer2D::shutdown()
 {
 	if (!initialized_)
 		return;
+	destroyTexture(birdTexture_);
+	destroyTexture(pigTexture_);
+	destroyTexture(backgroundTexture_);
 	if (vbo_)     glDeleteBuffers(1, &vbo_);
 	if (vao_)     glDeleteVertexArrays(1, &vao_);
+	if (texturedProgram_) glDeleteProgram(texturedProgram_);
 	if (program_) glDeleteProgram(program_);
-	vbo_ = vao_ = program_ = 0;
+	birdTextureW_ = birdTextureH_ = 0;
+	pigTextureW_ = pigTextureH_ = 0;
+	backgroundTextureW_ = backgroundTextureH_ = 0;
+	vbo_ = vao_ = program_ = texturedProgram_ = 0;
 	initialized_ = false;
 }
 
@@ -291,6 +491,47 @@ void Renderer2D::beginFrame(int framebufferW, int framebufferH)
 
 void Renderer2D::drawBackground(float floorY, float screenW)
 {
+	if (backgroundTexture_ != 0 && backgroundTextureW_ > 0 && backgroundTextureH_ > 0)
+	{
+		const float targetW = screenW;
+		const float targetH = floorY;
+		const float texAspect = static_cast<float>(backgroundTextureW_) /
+		                        static_cast<float>(backgroundTextureH_);
+		const float targetAspect = targetW / std::max(targetH, 1.f);
+
+		float uMin = 0.f, uMax = 1.f;
+		float vMin = 0.f, vMax = 1.f;
+		if (texAspect > targetAspect)
+		{
+			const float visibleU = targetAspect / texAspect;
+			const float margin = (1.f - visibleU) * 0.5f;
+			uMin = margin;
+			uMax = 1.f - margin;
+		}
+		else if (texAspect < targetAspect)
+		{
+			const float visibleV = texAspect / targetAspect;
+			const float margin = (1.f - visibleV) * 0.5f;
+			vMin = margin;
+			vMax = 1.f - margin;
+		}
+
+		const Vec2 corners[4] = {
+			Vec2(0.f, 0.f),
+			Vec2(0.f, targetH),
+			Vec2(targetW, targetH),
+			Vec2(targetW, 0.f)};
+		const float v[] = {
+			corners[0].x, corners[0].y, uMin, vMax,
+			corners[1].x, corners[1].y, uMin, vMin,
+			corners[2].x, corners[2].y, uMax, vMin,
+			corners[0].x, corners[0].y, uMin, vMax,
+			corners[2].x, corners[2].y, uMax, vMin,
+			corners[3].x, corners[3].y, uMax, vMax};
+		uploadAndDrawTextured(v, 6, backgroundTexture_, 0.f, 0.f);
+		return;
+	}
+
 	// Sky bands: gradient from deep blue at top to lighter blue near horizon
 	const float coverW = std::max(screenW, 1400.f);
 	const float bandH = floorY / 4.f;
@@ -405,6 +646,33 @@ void Renderer2D::drawGround(float floorY, float screenW)
 
 void Renderer2D::drawBird(Vec2 center, float radius, Color bodyColor, float rotationRad)
 {
+	(void)bodyColor;
+	if (birdTexture_ != 0 && birdTextureW_ > 0 && birdTextureH_ > 0)
+	{
+		auto rw = [&](Vec2 offsetFromCenter) -> Vec2
+		{
+			return rotatePoint(center + offsetFromCenter, center, rotationRad);
+		};
+
+		const float spriteW = radius * 2.85f;
+		const float spriteH = spriteW * static_cast<float>(birdTextureH_) /
+		                     static_cast<float>(birdTextureW_);
+		const Vec2 spriteCenter = rw(Vec2(-radius * 0.10f, -radius * 0.16f));
+		const Vec2 spritePos(spriteCenter.x - spriteW * 0.5f, spriteCenter.y - spriteH * 0.5f);
+		Vec2 corners[4];
+		rectCorners(spritePos, Vec2(spriteW, spriteH), rotationRad, corners);
+		const float v[] = {
+			corners[0].x, corners[0].y, 0.f, 1.f,
+			corners[1].x, corners[1].y, 0.f, 0.f,
+			corners[2].x, corners[2].y, 1.f, 0.f,
+			corners[0].x, corners[0].y, 0.f, 1.f,
+			corners[2].x, corners[2].y, 1.f, 0.f,
+			corners[3].x, corners[3].y, 1.f, 1.f};
+		drawFilledCircle(center + Vec2(4.f, 5.f), radius * 1.02f, Color(0.f, 0.f, 0.f, 0.16f), 28);
+		uploadAndDrawTextured(v, 6, birdTexture_, 0.f, 0.f);
+		return;
+	}
+
 	auto rw = [&](Vec2 offsetFromCenter) -> Vec2
 	{
 		return rotatePoint(center + offsetFromCenter, center, rotationRad);
@@ -471,6 +739,27 @@ void Renderer2D::drawBird(Vec2 center, float radius, Color bodyColor, float rota
 
 void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 {
+	if (pigTexture_ != 0 && pigTextureW_ > 0 && pigTextureH_ > 0)
+	{
+		const float spriteH = radius * 2.45f;
+		const float spriteW = spriteH * static_cast<float>(pigTextureW_) /
+		                     static_cast<float>(pigTextureH_);
+		const Vec2 spriteCenter = rotatePoint(center + Vec2(0.f, -radius * 0.08f), center, rotationRad);
+		const Vec2 spritePos(spriteCenter.x - spriteW * 0.5f, spriteCenter.y - spriteH * 0.5f);
+		Vec2 corners[4];
+		rectCorners(spritePos, Vec2(spriteW, spriteH), rotationRad, corners);
+		const float v[] = {
+			corners[0].x, corners[0].y, 0.f, 1.f,
+			corners[1].x, corners[1].y, 0.f, 0.f,
+			corners[2].x, corners[2].y, 1.f, 0.f,
+			corners[0].x, corners[0].y, 0.f, 1.f,
+			corners[2].x, corners[2].y, 1.f, 0.f,
+			corners[3].x, corners[3].y, 1.f, 1.f};
+		drawFilledCircle(center + Vec2(4.f, 5.f), radius * 0.98f, Color(0.f, 0.f, 0.f, 0.14f), 28);
+		uploadAndDrawTextured(v, 6, pigTexture_, 0.f, 0.f);
+		return;
+	}
+
 	auto rw = [&](Vec2 offsetFromCenter) -> Vec2
 	{
 		return rotatePoint(center + offsetFromCenter, center, rotationRad);
@@ -634,8 +923,8 @@ void Renderer2D::drawTrajectory(Vec2 launchPos, Vec2 launchVel, float gravity, i
 		float fade = 1.f - static_cast<float>(i) / static_cast<float>(dotCount);
 		float fade2 = fade * fade;  // Square attenuation for smoother falloff
 		
-		// Warm white / light yellow color
-		Color c(1.0f, 0.96f, 0.78f, 0.15f + 0.45f * fade2);
+		// Dark trajectory dots stay readable against the bright scenic background.
+		Color c(0.05f, 0.05f, 0.05f, 0.20f + 0.55f * fade2);
 		
 		// Larger and brighter at front, smaller and dimmer at back
 		float r = 3.5f + 2.0f * fade2;
