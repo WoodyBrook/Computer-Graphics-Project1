@@ -19,7 +19,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-// ──── Internal helpers ────
+// Internal helpers
 
 namespace
 {
@@ -387,7 +387,7 @@ void Renderer2D::rectCorners(Vec2 pos, Vec2 size, float rad, Vec2 out[4])
 	}
 }
 
-// ──── Public API ────
+// Public API
 
 void Renderer2D::init()
 {
@@ -532,7 +532,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 		return;
 	}
 
-	// Sky bands: gradient from deep blue at top to lighter blue near horizon
+	// Sky bands
 	const float coverW = std::max(screenW, 1400.f);
 	const float bandH = floorY / 4.f;
 	
@@ -547,7 +547,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 	drawFilledRect(Vec2(0.f, bandH * 2.f), Vec2(coverW, bandH), skyLight);
 	drawFilledRect(Vec2(0.f, bandH * 3.f), Vec2(coverW, bandH), skyHorizon);
 	
-	// Far mountain layer (lighter, more distant)
+	// Far mountain layer
 	Color farMountain(0.55f, 0.58f, 0.62f, 0.7f);
 	float farY = floorY - 80.f;
 	drawFilledCircle(Vec2(200.f, farY), 120.f, farMountain, 32);
@@ -556,7 +556,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 	drawFilledCircle(Vec2(1000.f, farY + 15.f), 110.f, farMountain, 32);
 	drawFilledRect(Vec2(0.f, farY), Vec2(coverW, 200.f), farMountain);
 	
-	// Near mountain layer (slightly darker, closer)
+	// Near mountain layer 
 	Color nearMountain(0.42f, 0.48f, 0.52f, 0.85f);
 	float nearY = floorY - 40.f;
 	drawFilledCircle(Vec2(150.f, nearY), 90.f, nearMountain, 32);
@@ -565,7 +565,7 @@ void Renderer2D::drawBackground(float floorY, float screenW)
 	drawFilledCircle(Vec2(900.f, nearY + 25.f), 80.f, nearMountain, 32);
 	drawFilledRect(Vec2(0.f, nearY), Vec2(coverW, 150.f), nearMountain);
 	
-	// Clouds: 3 circles + 1 rectangle per cloud
+	// Clouds
 	Color cloudColor = withAlpha(Colors::White, 0.18f);
 	Color cloudBright = withAlpha(Colors::White, 0.22f);
 	
@@ -610,7 +610,7 @@ void Renderer2D::drawGround(float floorY, float screenW)
 	const float grassH = 48.f;
 	const float dirtDepth = 500.f;
 	
-	// Dirt layer: from bottom of grass to deep underground
+	// Dirt layer
 	Vec2 dirtQuad[4] = {
 		Vec2(0.f, floorY + grassH),
 		Vec2(0.f, floorY + grassH + dirtDepth),
@@ -624,7 +624,7 @@ void Renderer2D::drawGround(float floorY, float screenW)
 	drawFilledRect(Vec2(0.f, bandY1), Vec2(screenW, 25.f), dirtBand1);
 	drawFilledRect(Vec2(0.f, bandY2), Vec2(screenW, 20.f), dirtBand2);
 	
-	// Grass layer: main strip
+	// Grass layer
 	Vec2 grassQuad[4] = {
 		Vec2(0.f, floorY),
 		Vec2(0.f, floorY + grassH),
@@ -639,7 +639,7 @@ void Renderer2D::drawGround(float floorY, float screenW)
 	float midLineY = floorY + grassH * 0.35f;
 	drawFilledRect(Vec2(0.f, midLineY), Vec2(screenW, 3.f), grassMid);
 	
-	// Grass bottom dark edge (seam)
+	// Grass bottom dark edge
 	thickLine(Vec2(0.f, floorY + grassH), Vec2(screenW, floorY + grassH), seam, 4.f);
 	thickLine(Vec2(0.f, floorY + grassH - 2.f), Vec2(screenW, floorY + grassH - 2.f), grassDark, 3.f);
 }
@@ -695,7 +695,7 @@ void Renderer2D::drawBird(Vec2 center, float radius, Color bodyColor, float rota
 	Color outlineColor = darken(bodyColor, 0.45f);
 	drawCircleOutline(center, radius, outlineColor, 2.f, 32);
 	
-	// Eye (facing +x in local bird space)
+	// Eye 
 	float eyeR = radius * 0.22f;
 	Vec2 eyeLocal = Vec2(radius * 0.32f, -radius * 0.22f);
 	Vec2 eyeCenter = rw(eyeLocal);
@@ -781,7 +781,7 @@ void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 	drawFilledCircle(rw(Vec2(-radius * 0.38f, radius * 0.18f)), radius * 0.22f, cheek, 16);
 	drawFilledCircle(rw(Vec2(radius * 0.38f, radius * 0.18f)), radius * 0.22f, cheek, 16);
 
-	// Snout (local +y downward on screen; rotates with body)
+	// Snout 
 	float snR = radius * 0.42f;
 	Vec2 snoutLocal = Vec2(radius * 0.08f, radius * 0.32f);
 	Vec2 snoutC = rw(snoutLocal);
@@ -795,7 +795,7 @@ void Renderer2D::drawPig(Vec2 center, float radius, float rotationRad)
 	drawFilledCircle(rw(snoutLocal + Vec2(-snR * 0.35f, snR * 0.1f)), nostR, snoutDark, 10);
 	drawFilledCircle(rw(snoutLocal + Vec2(snR * 0.35f, snR * 0.1f)), nostR, snoutDark, 10);
 
-	// Eyes (cartoon, local +x is pig forward)
+	// Eyes
 	float eyeRad = radius * 0.18f;
 	Vec2 eyeLLocal = Vec2(-radius * 0.32f, -radius * 0.15f);
 	Vec2 eyeRightLocal = Vec2(radius * 0.32f, -radius * 0.15f);
