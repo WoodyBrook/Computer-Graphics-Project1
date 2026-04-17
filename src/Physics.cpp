@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-// ──── Utility functions ────
+// Utility functions
 
 namespace
 {
@@ -97,7 +97,7 @@ inline Vec2 normalize(Vec2 v)
     return len > 1e-6f ? v / len : Vec2(0.f, 0.f);
 }
 
-// ──── RigidBody mass computation ────
+// RigidBody mass computation
 
 void RigidBody::computeMassProperties(float density)
 {
@@ -128,7 +128,7 @@ void RigidBody::computeMassProperties(float density)
     invInertia = inertia > 1e-6f ? 1.f / inertia : 0.f;
 }
 
-// ──── PhysicsWorld ────
+// PhysicsWorld
 
 PhysicsWorld::PhysicsWorld()
 {
@@ -162,10 +162,10 @@ void PhysicsWorld::integrate(RigidBody& body, float dt)
     // Apply gravity (y-down coordinate system)
     body.velocity.y += gravity_ * dt;
     
-    // Apply linear damping (slightly stronger for stability)
+    // Apply linear damping 
     body.velocity *= 0.998f;
     
-    // Apply angular damping (stronger for stability)
+    // Apply angular damping 
     body.angularVel *= 0.992f;
     
     // Semi-implicit Euler integration
@@ -189,7 +189,7 @@ void PhysicsWorld::integrate(RigidBody& body, float dt)
     
 }
 
-// ──── Collision Detection ────
+// Collision Detection
 
 bool PhysicsWorld::detectCollision(const RigidBody& a, const RigidBody& b, CollisionInfo& info)
 {
@@ -288,7 +288,7 @@ bool PhysicsWorld::detectCircleRect(const RigidBody& circle, const RigidBody& re
     }
     
     info.hasCollision = true;
-    info.normal = worldNormal * -1.f;  // Flip: localDiff is rect->circle, but we need circle->rect (A->B)
+    info.normal = worldNormal * -1.f;  
     info.contactPoint = worldClosest;
     return true;
 }
@@ -376,8 +376,6 @@ bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, Collis
 
     if (a.isGround && !b.isGround)
     {
-        // For ground contacts, using the dynamic rect's support points gives a much
-        // stabler lever arm than averaging against the giant floor rectangle.
         info.contactPoint = averageSupportPoint(b, minAxis * -1.f);
     }
     else if (b.isGround && !a.isGround)
@@ -397,7 +395,7 @@ bool PhysicsWorld::detectRectRect(const RigidBody& a, const RigidBody& b, Collis
     return true;
 }
 
-// ──── Collision Response ────
+// Collision Response 
 
 void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionInfo& info)
 {
@@ -427,7 +425,7 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
     const bool aGround = a.isGround;
     const bool bGround = b.isGround;
 
-    // Combined restitution (use minimum for stability)
+    // Combined restitution 
     float e = std::min(a.restitution, b.restitution);
     
     // Combined friction (geometric mean)
@@ -462,7 +460,7 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
         b.angularVel += cross2D(rB, impulse) * b.invInertia;
     }
     
-    // ──── Friction impulse (Coulomb model) ────
+    // Friction impulse (Coulomb model)
     
     // Recalculate relative velocity after normal impulse
     velA = a.velocity + cross2D(a.angularVel, rA);
@@ -519,7 +517,7 @@ void PhysicsWorld::resolveCollision(RigidBody& a, RigidBody& b, const CollisionI
     }
 }
 
-// ──── Position Correction (Baumgarte) ────
+// Position Correction 
 
 void PhysicsWorld::correctPositions(RigidBody& a, RigidBody& b, const CollisionInfo& info)
 {
@@ -547,17 +545,17 @@ void PhysicsWorld::correctPositions(RigidBody& a, RigidBody& b, const CollisionI
         b.position += correctionVec * (b.invMass / totalInvMass);
 }
 
-// ──── Physics Step ────
+// Physics Step 
 
 void PhysicsWorld::step(float dt)
 {
-    // 1. Integrate velocities and positions
+    // Integrate velocities and positions
     for (RigidBody& body : bodies_)
     {
         integrate(body, dt);
     }
     
-    // 2. Collision detection and response (multiple iterations for stability)
+    // Collision detection and response (multiple iterations for stability)
     for (int iter = 0; iter < collisionIterations; ++iter)
     {
         // Body-body collisions
@@ -575,7 +573,7 @@ void PhysicsWorld::step(float dt)
         }
     }
 
-    // 3. Sleep bodies that are resting on the ground or supported by another body.
+    // Sleep bodies that are resting on the ground or supported by another body.
     for (size_t i = 0; i < bodies_.size(); ++i)
     {
         RigidBody& body = bodies_[i];
