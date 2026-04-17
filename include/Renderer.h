@@ -3,9 +3,7 @@
 #include <cmath>
 #include <vector>
 
-/// Pure 2D renderer: standard C++, system OpenGL, and a tiny vendored image loader.
-
-// ──── Lightweight math types ────
+// Lightweight math types
 
 struct Vec2
 {
@@ -54,7 +52,7 @@ namespace Colors
 	static const Color Grass  (0.25f, 0.55f, 0.22f, 1.f);
 	static const Color Sky    (0.35f, 0.55f, 0.75f, 1.f);
 
-	/// Stable pastel fill color from integer ID (HSL to RGB).
+	/// Stable pastel fill color from integer ID.
 	inline Color pastelFromId(int id)
 	{
 		unsigned u = static_cast<unsigned>(id) * 2654435761u;
@@ -81,7 +79,7 @@ namespace Colors
 	}
 }
 
-// ──── Particles (simple) ────
+// Particles
 
 struct Particle
 {
@@ -92,7 +90,7 @@ struct Particle
 	float size;
 };
 
-// ──── Renderer ────
+// Renderer
 
 class Renderer2D
 {
@@ -100,22 +98,22 @@ public:
 	void init();
 	void shutdown();
 
-	/// Start of frame: viewport, clear (sky blue), orthographic projection.
+	/// Start of frame
 	void beginFrame(int framebufferW, int framebufferH);
 
 	/// Full-screen scenic backdrop behind the ground plane.
 	void drawBackground(float floorY, float screenW);
 
-	/// Subsoil + grass strip + top seam line (full width).
+	/// Ground
 	void drawGround(float floorY, float screenW);
 
-	/// Thick line segments (quads; does not rely on glLineWidth).
+	/// Thick line segments 
 	void drawLine(Vec2 a, Vec2 b, Color color, float width);
 
-	/// Filled rectangle, optional rotation in radians (about center).
+	/// Filled rectangle
 	void drawFilledRect(Vec2 pos, Vec2 size, Color color, float rotationRad = 0.f);
 
-	/// Rectangle outline, optional rotation in radians.
+	/// Rectangle outline
 	void drawRectOutline(Vec2 pos, Vec2 size, Color color, float lineWidth, float rotationRad = 0.f);
 
 	/// Filled quad from four corner points.
@@ -133,20 +131,20 @@ public:
 	/// Bird: textured sprite aligned to the physics circle and rotated by rotationRad.
 	void drawBird(Vec2 center, float radius, Color bodyColor, float rotationRad = 0.f);
 
-	/// Pig: textured sprite aligned to the physics circle and rotated by rotationRad.
+	/// Pig
 	void drawPig(Vec2 center, float radius, float rotationRad = 0.f);
 
-	/// Brick: fill + outline + horizontal stripes.
+	/// Brick
 	void drawBrick(Vec2 pos, Vec2 size, Color fillColor, float rotationRad = 0.f);
 
 	/// Slingshot bands (two arms to pull point) + small cradle circle.
 	void drawSlingshot(Vec2 anchor, Vec2 pullPoint, float bandWidth = 3.f);
 
-	/// Parabolic trajectory preview (constant acceleration); pass gravity as +y scalar.
+	/// Parabolic trajectory preview 
 	void drawTrajectory(Vec2 launchPos, Vec2 launchVel, float gravity,
 	                    int dotCount = 30, float timeStep = 0.05f);
 
-	/// Spawn random-direction particles near origin (total count capped).
+	/// Spawn random-direction particles near origin.
 	void spawnParticles(Vec2 origin, int count, Color baseColor);
 
 	/// Update, draw, and remove dead particles.
@@ -155,10 +153,10 @@ public:
 	/// Semi-transparent pause overlay with a simple PAUSED label.
 	void drawPausedOverlay(float screenW, float screenH);
 
-	/// Debug marker: contact point + normal.
+	/// Debug marker
 	void drawContactDebug(Vec2 point, Vec2 normal, bool visible);
 
-	/// End of frame (reserved; no-op now; batching could flush here later).
+	/// End of frame
 	void flush();
 
 private:
