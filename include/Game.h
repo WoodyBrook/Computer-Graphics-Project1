@@ -17,7 +17,7 @@ enum GameState
 struct Bird
 {
     RigidBody  body;
-    Vec2       anchorPos;      // Slingshot fork (visual only; above initialPos)
+    Vec2       anchorPos;      // Slingshot fork
     Vec2       initialPos;     // Initial position before launch
     Color      color;
     bool       launched = false;
@@ -36,7 +36,7 @@ struct Brick
     void init(float x, float y, float w, float h, const Color& c, int brickId);
 };
 
-// Pig (green pig; circle body) 
+// Pig
 struct Pig
 {
     RigidBody  body;
@@ -102,11 +102,10 @@ private:
     // Scene setup
     void setupScene();
 
-    /// Order in physics: bird, then all bricks, then all pigs, then ground.
     void rebuildPhysicsBodies();
     void syncBodiesFromPhysics();
 
-    /// During flight: remove pigs hit by the bird or pigs that fall to the ground.
+    /// Pig hit
     void removePigsHitThisFrame();
     bool allDynamicBodiesSettled() const;
 
