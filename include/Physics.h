@@ -3,16 +3,16 @@
 #include "Renderer.h"  // Include for Vec2 and Color definitions
 #include <vector>
 
-// ──── Collision Info ────
+// Collision Info
 struct CollisionInfo
 {
-    Vec2  normal;       // A → B direction
+    Vec2  normal;    
     float penetration;
     Vec2  contactPoint;
     bool  hasCollision = false;
 };
 
-// ──── Rigid Body (value semantics) ────
+// Rigid Body (value semantics)
 struct RigidBody
 {
     Vec2  position;          // Center point
@@ -49,12 +49,12 @@ public:
     std::vector<RigidBody>& bodies();
     const std::vector<RigidBody>& bodies() const;
     
-    // Collision iteration count (higher = more stable stacking)
+    // Collision iteration count
     int collisionIterations = 6;
     
 private:
     std::vector<RigidBody> bodies_;
-    float gravity_ = 500.f;  // Pixels/s^2, y-down coordinate system
+    float gravity_ = 500.f;  
     
     // Integration: apply gravity and damping
     void integrate(RigidBody& body, float dt);
@@ -71,8 +71,8 @@ private:
     void correctPositions(RigidBody& a, RigidBody& b, const CollisionInfo& info);
 };
 
-// ──── Utility functions ────
-inline float cross2D(Vec2 a, Vec2 b);  // 2D cross product (scalar)
+// Utility functions
+inline float cross2D(Vec2 a, Vec2 b);  // 2D cross product 
 inline Vec2  cross2D(Vec2 v, float s);  // Cross vector with scalar
 inline Vec2  cross2D(float s, Vec2 v);  // Cross scalar with vector
 inline float dot(Vec2 a, Vec2 b);
