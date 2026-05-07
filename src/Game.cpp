@@ -16,7 +16,7 @@ bool circleCircleOverlap(const RigidBody& a, const RigidBody& b)
     return (d.x * d.x + d.y * d.y) <= r * r;
 }
 
-/// Circle vs rotated AABB (same test as PhysicsWorld::detectCircleRect).
+/// Circle vs rotated AABB 
 float speedSquared(Vec2 v)
 {
     return v.x * v.x + v.y * v.y;
@@ -24,7 +24,7 @@ float speedSquared(Vec2 v)
 
 } // namespace
 
-// ──── Bird initialization ────
+// Bird initialization 
 void Bird::init(float x, float y, float radius, const Color& c)
 {
     body.shape = RigidBody::Circle;
@@ -40,15 +40,13 @@ void Bird::init(float x, float y, float radius, const Color& c)
     body.friction = 0.3f;      // Higher friction for stability
     
     initialPos = Vec2(x, y);
-    // Anchor is the slingshot stem top. Keep it clearly below the bird center so the
-    // pouch sits around the lower half of the bird and feels nested in the bands.
     anchorPos = Vec2(x, y + 16.f);
     color = c;
     launched = false;
     pullDistance = 0.f;
 }
 
-// ──── Brick initialization ────
+// Brick initialization
 void Brick::init(float x, float y, float w, float h, const Color& c, int brickId)
 {
     body.shape = RigidBody::Rect;
@@ -63,7 +61,7 @@ void Brick::init(float x, float y, float w, float h, const Color& c, int brickId
     id = brickId;
 }
 
-// ──── Pig initialization ────
+// Pig initialization
 void Pig::init(float x, float y, float radius, int pigId)
 {
     body.shape = RigidBody::Circle;
@@ -81,7 +79,7 @@ void Pig::init(float x, float y, float radius, int pigId)
     id = pigId;
 }
 
-// ──── Game ────
+// Game
 Game::Game()
 {
 }
@@ -90,9 +88,7 @@ void Game::init(float screenW, float screenH, float groundY)
 {
     setViewportSize(screenW, screenH);
     groundY_ = groundY;
-    
-    physics_.groundY = groundY;
-    
+
     setupScene();
 }
 
@@ -107,30 +103,40 @@ void Game::setupScene()
     pendingLaunchFx_ = false;
     pendingLaunchFxPos_ = Vec2(0.f, 0.f);
     pendingPigFxPositions_.clear();
+    settleFrames_ = 0;
+
+    // Keep the rendered ground and the physical floor aligned at the same top edge.
+    groundSize_ = Vec2(std::max(screenW_ * 4.f, 6000.f), 548.f);
+    groundBody_.shape = RigidBody::Rect;
+    groundBody_.position = Vec2(screenW_ * 0.5f, groundY_ + groundSize_.y * 0.5f);
+    groundBody_.velocity = Vec2(0.f, 0.f);
+    groundBody_.rotation = 0.f;
+    groundBody_.angularVel = 0.f;
+    groundBody_.halfSize = groundSize_ * 0.5f;
+    groundBody_.radius = 0.f;
+    groundBody_.isStatic = true;
+    groundBody_.isGround = true;
+    groundBody_.restitution = 0.2f;
+    groundBody_.friction = 0.6f;
+    groundBody_.computeMassProperties(1.f);
     
-    // Initialize bird so the full pull radius fits above the ground, which makes aiming
-    // feel natural in all directions instead of getting distorted near the floor.
     float birdRadius = 20.f;
     float birdX = 200.f;
     const float kBirdNestAboveGround = 110.f;
     float birdY = groundY_ - birdRadius - kBirdNestAboveGround;
     bird_.init(birdX, birdY, birdRadius, Colors::Red);
-    // Match the current slingshot drawing geometry: stemHeight is 82 in Renderer.cpp.
-    // Keeping the stem top fixed relative to the ground makes the bird/sling relationship stable.
     bird_.anchorPos = Vec2(birdX, groundY_ - 82.f);
     
-    // Initialize brick stack (3x3 pyramid)
+    // Initialize brick stack
     float brickW = 60.f;
     float brickH = 30.f;
     float startX = 800.f;
-    // Spawn the tower already resting on the ground so launching the bird does not
-    // introduce an artificial "settling" drop that nudges the pig off the stack.
     float startY = groundY_ - brickH * 0.5f;
     
     bricks_.clear();
     int brickId = 0;
     
-    // Bottom layer: 3 bricks
+    // Bottom layer
     for (int col = 0; col < 3; ++col)
     {
         Brick brick;
@@ -141,7 +147,7 @@ void Game::setupScene()
         ++brickId;
     }
     
-    // Middle layer: 2 bricks
+    // Middle layer
     startY -= brickH;
     startX += brickW * 0.5f;
     for (int col = 0; col < 2; ++col)
@@ -154,7 +160,7 @@ void Game::setupScene()
         ++brickId;
     }
     
-    // Top layer: 1 brick
+    // Top layer
     startY -= brickH;
     startX += brickW * 0.5f;
     Brick topBrick;
@@ -190,6 +196,7 @@ void Game::rebuildPhysicsBodies()
         physics_.addBody(brick.body);
     for (Pig& p : pigs_)
         physics_.addBody(p.body);
+    physics_.addBody(groundBody_);
 }
 
 void Game::syncBodiesFromPhysics()
@@ -268,7 +275,25 @@ void Game::removePigsHitThisFrame()
     rebuildPhysicsBodies();
 }
 
-// ──── Coordinate conversion ────
+bool Game::allDynamicBodiesSettled() const
+{
+    const auto& bodies = physics_.bodies();
+    bool hasDynamic = false;
+
+    for (const RigidBody& body : bodies)
+    {
+        if (body.isStatic)
+            continue;
+
+        hasDynamic = true;
+        if (body.velocity.length() > 4.f || std::abs(body.angularVel) > 0.05f)
+            return false;
+    }
+
+    return hasDynamic;
+}
+
+// Coordinate conversion
 Vec2 Game::bodyToDrawPos(const RigidBody& body)
 {
     // Convert center + halfSize to draw position (top-left corner)
@@ -294,7 +319,7 @@ Vec2 Game::bodyToDrawSize(const RigidBody& body)
     }
 }
 
-// ──── Physics step ────
+// Physics step
 void Game::physicsStep(float dt)
 {
     if (paused_)
@@ -305,25 +330,23 @@ void Game::physicsStep(float dt)
         physics_.step(dt);
         syncBodiesFromPhysics();
         removePigsHitThisFrame();
-        
-        // Check if bird has settled
-        float velLen = bird_.body.velocity.length();
-        bool nearGround = bird_.body.position.y + bird_.body.radius >= groundY_ - 2.f;
-        bool outOfBounds = bird_.body.position.x > screenW_ + 100.f ||
-                          bird_.body.position.x < -100.f ||
-                          bird_.body.position.y > groundY_ + 100.f;
-        
-        if ((velLen < 5.f && std::abs(bird_.body.angularVel) < 0.05f && nearGround) || outOfBounds)
-        {
+
+        // Only stop the simulation when the entire scene has been calm for a short
+        // moment, otherwise the old bird-only rule freezes half-collapsed towers.
+        if (allDynamicBodiesSettled())
+            ++settleFrames_;
+        else
+            settleFrames_ = 0;
+
+        if (settleFrames_ >= 18)
             state_ = Settled;
-        }
     }
 }
 
-// ──── Render ────
+// Render
 void Game::render(Renderer2D& renderer, float screenW, float screenH)
 {
-    // Draw background (grass strip)
+    // Draw background
     renderer.drawBackground(groundY_, screenW);
     
     // Draw ground
@@ -382,7 +405,7 @@ void Game::render(Renderer2D& renderer, float screenW, float screenH)
     }
 }
 
-// ──── Input handling ────
+// Input handling
 void Game::onMousePress(float worldX, float worldY, float birdRadius)
 {
     if (paused_ || state_ != Aiming)
@@ -409,16 +432,14 @@ void Game::onMouseDrag(float worldX, float worldY)
     
     const float r = bird_.body.radius;
     const float margin = 8.f;
-    // Keep bird bottom above the ground plane (same line physics uses); still allow a
-    // useful downward pull because the nest sits higher than the ground contact line.
+    // Keep bird bottom above the ground plane
     const float maxBirdCenterY = groundY_ - r - 2.f;
     const float pullYHi = std::min(screenH_ - r - margin, maxBirdCenterY);
 
     pullPoint_.x = std::clamp(pullPoint_.x, margin, screenW_ - margin);
     pullPoint_.y = std::clamp(pullPoint_.y, margin, pullYHi);
     
-    // Keep the pull radius shorter than the bird's rest height above the ground so aiming
-    // can sweep through the full circle without the ground clamp distorting the angle.
+    // Keep the pull radius shorter than the bird's rest height above the ground.
     float maxPull = 90.f;
     Vec2 diff = pullPoint_ - bird_.initialPos;
     float dist = diff.length();
@@ -490,9 +511,6 @@ void Game::onMouseRelease(float speedScale)
 void Game::togglePause()
 {
     paused_ = !paused_;
-
-    // Cancelling an active aim drag avoids "pause while aiming, release to launch"
-    // and restores the bird to its neutral slingshot position.
     if (paused_ && state_ == Aiming && dragging_)
     {
         dragging_ = false;

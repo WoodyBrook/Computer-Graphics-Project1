@@ -2,18 +2,17 @@
 
 #include "Renderer.h"  // Include for Vec2 and Color definitions
 #include <vector>
-#include <cmath>
 
-// ──── Collision Info ────
+// Collision Info
 struct CollisionInfo
 {
-    Vec2  normal;       // A → B direction
+    Vec2  normal;    
     float penetration;
     Vec2  contactPoint;
     bool  hasCollision = false;
 };
 
-// ──── Rigid Body (value semantics) ────
+// Rigid Body (value semantics)
 struct RigidBody
 {
     Vec2  position;          // Center point
@@ -29,6 +28,7 @@ struct RigidBody
     
     enum Shape { Circle, Rect } shape = Rect;
     bool  isStatic     = false;
+    bool  isGround     = false; // Static rect that represents the floor material
     float restitution  = 0.25f;  // Coefficient of restitution (bounce)
     float friction     = 0.5f;  // Coulomb friction coefficient
     
@@ -49,15 +49,12 @@ public:
     std::vector<RigidBody>& bodies();
     const std::vector<RigidBody>& bodies() const;
     
-    // Collision iteration count (higher = more stable stacking)
+    // Collision iteration count
     int collisionIterations = 6;
-    
-    // Ground y-coordinate (top edge of ground plane)
-    float groundY = 0.f;
     
 private:
     std::vector<RigidBody> bodies_;
-    float gravity_ = 500.f;  // Pixels/s^2, y-down coordinate system
+    float gravity_ = 500.f;  
     
     // Integration: apply gravity and damping
     void integrate(RigidBody& body, float dt);
@@ -66,19 +63,16 @@ private:
     bool detectCollision(const RigidBody& a, const RigidBody& b, CollisionInfo& info);
     bool detectCircleRect(const RigidBody& circle, const RigidBody& rect, CollisionInfo& info);
     bool detectRectRect(const RigidBody& a, const RigidBody& b, CollisionInfo& info);
-    bool detectBodyGround(const RigidBody& body, CollisionInfo& info);
     
     // Collision response
     void resolveCollision(RigidBody& a, RigidBody& b, const CollisionInfo& info);
-    void resolveBodyGround(RigidBody& body, const CollisionInfo& info);
     
     // Position correction (Baumgarte stabilization)
     void correctPositions(RigidBody& a, RigidBody& b, const CollisionInfo& info);
-    void correctPositionGround(RigidBody& body, const CollisionInfo& info);
 };
 
-// ──── Utility functions ────
-inline float cross2D(Vec2 a, Vec2 b);  // 2D cross product (scalar)
+// Utility functions
+inline float cross2D(Vec2 a, Vec2 b);  // 2D cross product 
 inline Vec2  cross2D(Vec2 v, float s);  // Cross vector with scalar
 inline Vec2  cross2D(float s, Vec2 v);  // Cross scalar with vector
 inline float dot(Vec2 a, Vec2 b);

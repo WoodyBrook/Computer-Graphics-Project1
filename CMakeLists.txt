@@ -27,6 +27,11 @@ add_executable(AngryBird ${SOURCES})
 # Include directories
 target_include_directories(AngryBird PRIVATE
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/third_party/stb
+)
+
+target_compile_definitions(AngryBird PRIVATE
+    ANGRY_BIRD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 # Link libraries

@@ -7,13 +7,13 @@
 #include <iostream>
 #include <cstdlib>
 
-// ──── Constants ────
+// Constants
 const int kWindowWidth  = 1280;
 const int kWindowHeight = 720;
 const float kGroundY    = 632.f;  // Top edge of the ground (floorY)
 const float kSpeedScale = 8.f;    // Launch speed multiplier
 
-// ──── Global state ────
+// Global state
 static Renderer2D gRenderer;
 static Game gGame;
 static float gScaleX = 1.f;
@@ -33,7 +33,7 @@ static bool updateWindowMetrics(GLFWwindow* window, int& winW, int& winH, int& f
     return true;
 }
 
-// ──── GLFW callbacks ────
+// GLFW callbacks
 static void onErrorCallback(int error, const char* description)
 {
     std::cerr << "GLFW Error (" << error << "): " << description << "\n";
@@ -88,7 +88,7 @@ static void onCursorPosCallback(GLFWwindow* window, double mx, double my)
     gGame.onMouseDrag(worldX, worldY);
 }
 
-// ──── Entry point ────
+// Entry point 
 int main()
 {
     // Initialize GLFW
@@ -99,7 +99,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    // Configure OpenGL 3.3 Core context (macOS requires forward compatibility)
+    // Configure OpenGL 3.3 Core context
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -119,7 +119,7 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);  // Enable vsync
 
-    // Get window and framebuffer sizes (for Retina scaling)
+    // Get window and framebuffer sizes
     int winW, winH, fbW, fbH;
     if (!updateWindowMetrics(window, winW, winH, fbW, fbH))
     {
@@ -141,7 +141,7 @@ int main()
     gGame.init(static_cast<float>(fbW), static_cast<float>(fbH), kGroundY);
 
     // Main loop with fixed physics timestep
-    const double physDt = 1.0 / 60.0;  // Fixed physics step (60 Hz)
+    const double physDt = 1.0 / 60.0;  // Fixed physics step
     double accumulator = 0.0;
     double lastTime = glfwGetTime();
     double frameTime = 0.0;
@@ -167,7 +167,7 @@ int main()
             continue;
         }
         
-        // Begin frame: clear sky blue background, set orthographic projection
+        // Begin frame
         gRenderer.beginFrame(fbW, fbH);
         
         // Render game scene
